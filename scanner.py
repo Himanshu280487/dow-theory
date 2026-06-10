@@ -5,8 +5,7 @@ from email_alert import send_email
 # =========================
 # SETTINGS
 # =========================
-SWING_WINDOW = 5
-NUM_STOCKS = 10
+SWING_WINDOW = 10
 
 # =========================
 # SWING DETECTION
@@ -51,18 +50,26 @@ def is_uptrend(highs, lows):
 
 
 # =========================
-# LOAD NSE STOCKS
+# LOAD ALL NSE STOCKS
 # =========================
 url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
 stocks = pd.read_csv(url)
 
-symbols = stocks["SYMBOL"].head(NUM_STOCKS)
+# CLEAN SYMBOLS (very important)
+symbols = (
+    stocks["SYMBOL"]
+    .dropna()
+    .astype(str)
+    .unique()
+)
 
 signals = []
 watchlist = []
 
+print(f"Total stocks to scan: {len(symbols)}")
+
 # =========================
-# SCAN LOOP
+# SCAN ALL STOCKS
 # =========================
 for symbol in symbols:
 
@@ -117,19 +124,24 @@ for symbol in symbols:
                 "risk": risk
             })
 
-    except Exception as e:
-        print(f"Error {ticker}: {e}")
+    except Exception:
+        continue
 
 
 # =========================
-# OUTPUT
+# RESULTS
 # =========================
 email_body = "DOW THEORY BUY SIGNALS\n\n"
 
+print("\n==================== RESULTS ====================")
+
 if not signals:
     email_body += "No valid signals found today.\n"
+    print("No signals found")
 else:
     for s in signals:
+        print(s["ticker"], s["buy"], s["close"])
+
         email_body += (
             f"{s['ticker']}\n"
             f"BUY ABOVE: {s['buy']:.2f}\n"
@@ -139,6 +151,9 @@ else:
             f"------------------------\n\n"
         )
 
+# =========================
+# WATCHLIST (IMPORTANT)
+# =========================
 watchlist = sorted(watchlist, key=lambda x: abs(x["distance"]))[:20]
 
 email_body += "\nTOP WATCHLIST\n\n"

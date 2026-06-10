@@ -131,17 +131,6 @@ if not signals:
 
     print("No valid signals found today.")
 
-email_body += f"""
-{s['ticker']}
-
-BUY ABOVE : {s['buy']:.2f}
-CLOSE     : {s['close']:.2f}
-STOP LOSS : {s['sl']:.2f}
-RISK      : {s['risk']:.2f}%
-
---------------------------------
-"""
-
 email_body = "DOW THEORY BUY SIGNALS\n\n"
 
 else:
@@ -159,3 +148,9 @@ else:
 
     print("-" * 50)
     print(f"\nTOTAL SIGNALS : {len(signals)}")
+    from email_alert import send_email
+
+    send_email(
+        "Dow Theory Scanner Results",
+        email_body
+    )

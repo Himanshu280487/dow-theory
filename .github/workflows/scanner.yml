@@ -1,6 +1,8 @@
 name: Dow Theory Scanner
 
 on:
+  schedule:
+    - cron: "30 16 * * 1-5"
   workflow_dispatch:
 
 jobs:
@@ -16,7 +18,6 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      # ✅ IMPORTANT: PASS SECRETS HERE
       - name: Run scanner
         run: python scanner.py
         env:

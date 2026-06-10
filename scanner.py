@@ -12,31 +12,30 @@ NUM_STOCKS = 10
 # SWING DETECTION
 # =========================================================
 
-def get_swings(df, window=5):
-    highs = df["High"]
-    lows = df["Low"]
+def get_swings(df, window=10):
+
+    highs = df["High"].astype(float)
+    lows = df["Low"].astype(float)
 
     swing_highs = []
     swing_lows = []
 
     for i in range(window, len(df) - window):
 
-        current_high = highs.iloc[i]
-        current_low = lows.iloc[i]
+        current_high = float(highs.iloc[i])
+        current_low = float(lows.iloc[i])
 
-        # Swing High
-        if (
-            current_high > highs.iloc[i - window:i].max()
-            and current_high > highs.iloc[i + 1:i + window + 1].max()
-        ):
-            swing_highs.append(float(current_high))
+        left_high = float(highs.iloc[i-window:i].max())
+        right_high = float(highs.iloc[i+1:i+window+1].max())
 
-        # Swing Low
-        if (
-            current_low < lows.iloc[i - window:i].min()
-            and current_low < lows.iloc[i + 1:i + window + 1].min()
-        ):
-            swing_lows.append(float(current_low))
+        left_low = float(lows.iloc[i-window:i].min())
+        right_low = float(lows.iloc[i+1:i+window+1].min())
+
+        if current_high > left_high and current_high > right_high:
+            swing_highs.append(current_high)
+
+        if current_low < left_low and current_low < right_low:
+            swing_lows.append(current_low)
 
     return swing_highs, swing_lows
 
@@ -45,13 +44,18 @@ def get_swings(df, window=5):
 # TREND CHECK
 # =========================================================
 
-def is_uptrend(highs, lows):
-    if len(highs) < 2 or len(lows) < 2:
+def is_uptrend(swing_highs, swing_lows):
+
+    if len(swing_highs) < 2:
+        return False
+
+    if len(swing_lows) < 2:
         return False
 
     return (
-        highs[-1] > highs[-2]
-        and lows[-1] > lows[-2]
+        swing_highs[-1] > swing_highs[-2]
+        and
+        swing_lows[-1] > swing_lows[-2]
     )
 
 
@@ -73,6 +77,8 @@ for symbol in symbols:
 
     try:
 
+        print(f"Scanning {ticker}...")
+
         df = yf.download(
             ticker,
             period="1y",
@@ -80,16 +86,27 @@ for symbol in symbols:
             progress=False
         )
 
-        if df.empty or len(df) < 100:
+        # Skip bad downloads
+        if df.empty:
+            continue
+
+        # Handle MultiIndex columns returned by yfinance
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        required_cols = ["Open", "High", "Low", "Close"]
+
+        if not all(col in df.columns for col in required_cols):
+            print(f"Missing columns for {ticker}")
+            continue
+
+        if len(df) < 100:
             continue
 
         swing_highs, swing_lows = get_swings(
             df,
             SWING_WINDOW
         )
-
-        if len(swing_highs) < 2 or len(swing_lows) < 2:
-            continue
 
         if not is_uptrend(
             swing_highs,
@@ -99,10 +116,10 @@ for symbol in symbols:
 
         close_price = float(df["Close"].iloc[-1])
 
-        breakout_price = swing_highs[-1]
-        stop_loss = swing_lows[-1]
+        breakout_price = float(swing_highs[-1])
+        stop_loss = float(swing_lows[-1])
 
-        # Buy Signal
+        # Buy signal
         if close_price > breakout_price:
 
             risk_pct = (
@@ -119,14 +136,17 @@ for symbol in symbols:
             })
 
     except Exception as e:
-        print(f"Error processing {ticker}: {e}")
 
+        print(f"Error processing {ticker}")
+        print(e)
 
 # =========================================================
 # RESULTS
 # =========================================================
 
-print("\nDOW THEORY BUY SIGNALS\n")
+print("\n" + "=" * 60)
+print("DOW THEORY BUY SIGNALS")
+print("=" * 60)
 
 if not signals:
 
@@ -147,26 +167,23 @@ else:
         print(f"Risk       : {s['risk']:.2f}%")
         print("-" * 50)
 
-        email_body += f"""
-{s['ticker']}
-
-BUY ABOVE : {s['buy']:.2f}
-CLOSE     : {s['close']:.2f}
-STOP LOSS : {s['sl']:.2f}
-RISK      : {s['risk']:.2f}%
-
---------------------------------
-
-"""
+        email_body += (
+            f"{s['ticker']}\n"
+            f"BUY ABOVE : {s['buy']:.2f}\n"
+            f"CLOSE     : {s['close']:.2f}\n"
+            f"STOP LOSS : {s['sl']:.2f}\n"
+            f"RISK      : {s['risk']:.2f}%\n"
+            f"{'-'*40}\n\n"
+        )
 
     print(f"\nTOTAL SIGNALS : {len(signals)}")
-
 
 # =========================================================
 # EMAIL
 # =========================================================
 
 try:
+
     from email_alert import send_email
 
     send_email(
@@ -174,7 +191,12 @@ try:
         email_body
     )
 
-    print("\nEmail sent successfully.")
+    print("\nEmail function executed.")
+
+except ImportError:
+
+    print("\nemail_alert.py not found.")
 
 except Exception as e:
+
     print(f"\nEmail error: {e}")

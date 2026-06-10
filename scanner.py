@@ -1,7 +1,14 @@
-import pandas as pd
+import yfinance as yf
 
-url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+symbol = "RELIANCE.NS"
 
-df = pd.read_csv(url)
+df = yf.download(
+    symbol,
+    period="1y",
+    auto_adjust=True,
+    progress=False
+)
 
-print(f"Total NSE stocks loaded: {len(df)}")
+print(symbol)
+print(f"Rows downloaded: {len(df)}")
+print(df.tail())

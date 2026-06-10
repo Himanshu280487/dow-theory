@@ -1,13 +1,3 @@
-
-These are NOT Python code — they were formatting markers from chat.
-
----
-
-# ✅ Clean working scanner.py (COPY THIS ONLY)
-
-Paste this **exact file content**:
-
-```python
 import pandas as pd
 import yfinance as yf
 from email_alert import send_email
@@ -72,14 +62,13 @@ signals = []
 watchlist = []
 
 # =========================
-# SCANNER LOOP
+# SCAN LOOP
 # =========================
 for symbol in symbols:
 
     ticker = f"{symbol}.NS"
 
     try:
-        print(f"Scanning {ticker}...")
 
         df = yf.download(
             ticker,
@@ -135,29 +124,21 @@ for symbol in symbols:
 # =========================
 # OUTPUT
 # =========================
-print("\nDOW THEORY BUY SIGNALS\n")
-
 email_body = "DOW THEORY BUY SIGNALS\n\n"
 
 if not signals:
-    print("No valid signals found today.")
     email_body += "No valid signals found today.\n"
 else:
     for s in signals:
-        print(s["ticker"], s["buy"], s["close"])
+        email_body += (
+            f"{s['ticker']}\n"
+            f"BUY ABOVE: {s['buy']:.2f}\n"
+            f"CLOSE: {s['close']:.2f}\n"
+            f"SL: {s['sl']:.2f}\n"
+            f"RISK: {s['risk']:.2f}%\n"
+            f"------------------------\n\n"
+        )
 
-        email_body += f"""
-{s['ticker']}
-BUY ABOVE: {s['buy']:.2f}
-CLOSE: {s['close']:.2f}
-SL: {s['sl']:.2f}
-RISK: {s['risk']:.2f}%
-------------------------
-"""
-
-# =========================
-# WATCHLIST
-# =========================
 watchlist = sorted(watchlist, key=lambda x: abs(x["distance"]))[:20]
 
 email_body += "\nTOP WATCHLIST\n\n"
@@ -168,9 +149,4 @@ for w in watchlist:
 # =========================
 # EMAIL
 # =========================
-success = send_email(
-    "Dow Theory Scanner Results",
-    email_body
-)
-
-print("Email sent:", success)
+send_email("Dow Theory Scanner Results", email_body)

@@ -1,274 +1,176 @@
+
+These are NOT Python code — they were formatting markers from chat.
+
+---
+
+# ✅ Clean working scanner.py (COPY THIS ONLY)
+
+Paste this **exact file content**:
+
+```python
 import pandas as pd
 import yfinance as yf
-
 from email_alert import send_email
 
-# =========================================================
-
+# =========================
 # SETTINGS
-
-# =========================================================
-
+# =========================
 SWING_WINDOW = 10
 NUM_STOCKS = 10
 
-# =========================================================
-
+# =========================
 # SWING DETECTION
-
-# =========================================================
-
+# =========================
 def get_swings(df, window=10):
 
-```
-highs = df["High"].astype(float)
-lows = df["Low"].astype(float)
+    highs = df["High"].astype(float)
+    lows = df["Low"].astype(float)
 
-swing_highs = []
-swing_lows = []
+    swing_highs = []
+    swing_lows = []
 
-for i in range(window, len(df) - window):
+    for i in range(window, len(df) - window):
 
-    current_high = float(highs.iloc[i])
-    current_low = float(lows.iloc[i])
+        current_high = float(highs.iloc[i])
+        current_low = float(lows.iloc[i])
 
-    left_high = float(highs.iloc[i-window:i].max())
-    right_high = float(highs.iloc[i+1:i+window+1].max())
+        left_high = float(highs.iloc[i-window:i].max())
+        right_high = float(highs.iloc[i+1:i+window+1].max())
 
-    left_low = float(lows.iloc[i-window:i].min())
-    right_low = float(lows.iloc[i+1:i+window+1].min())
+        left_low = float(lows.iloc[i-window:i].min())
+        right_low = float(lows.iloc[i+1:i+window+1].min())
 
-    # Swing High
-    if current_high > left_high and current_high > right_high:
-        swing_highs.append(current_high)
+        if current_high > left_high and current_high > right_high:
+            swing_highs.append(current_high)
 
-    # Swing Low
-    if current_low < left_low and current_low < right_low:
-        swing_lows.append(current_low)
+        if current_low < left_low and current_low < right_low:
+            swing_lows.append(current_low)
 
-return swing_highs, swing_lows
-```
+    return swing_highs, swing_lows
 
-# =========================================================
 
-# DOW THEORY TREND
+# =========================
+# TREND CHECK
+# =========================
+def is_uptrend(highs, lows):
 
-# =========================================================
+    if len(highs) < 2 or len(lows) < 2:
+        return False
 
-def is_uptrend(swing_highs, swing_lows):
+    return highs[-1] > highs[-2] and lows[-1] > lows[-2]
 
-```
-if len(swing_highs) < 2:
-    return False
 
-if len(swing_lows) < 2:
-    return False
-
-return (
-    swing_highs[-1] > swing_highs[-2]
-    and
-    swing_lows[-1] > swing_lows[-2]
-)
-```
-
-# =========================================================
-
-# LOAD NSE STOCK LIST
-
-# =========================================================
-
-print("Downloading NSE stock list...")
-
+# =========================
+# LOAD NSE STOCKS
+# =========================
 url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
-
 stocks = pd.read_csv(url)
 
 symbols = stocks["SYMBOL"].head(NUM_STOCKS)
 
-# For all NSE stocks later:
-
-# symbols = stocks["SYMBOL"]
-
-# =========================================================
-
-# SCAN
-
-# =========================================================
-
 signals = []
 watchlist = []
 
+# =========================
+# SCANNER LOOP
+# =========================
 for symbol in symbols:
 
-```
-ticker = f"{symbol}.NS"
+    ticker = f"{symbol}.NS"
 
-try:
+    try:
+        print(f"Scanning {ticker}...")
 
-    print(f"Scanning {ticker}...")
+        df = yf.download(
+            ticker,
+            period="1y",
+            auto_adjust=True,
+            progress=False
+        )
 
-    df = yf.download(
-        ticker,
-        period="1y",
-        auto_adjust=True,
-        progress=False
-    )
+        if df.empty:
+            continue
 
-    if df.empty:
-        continue
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
 
-    # Handle MultiIndex columns
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+        if len(df) < 100:
+            continue
 
-    required_cols = ["Open", "High", "Low", "Close"]
+        swing_highs, swing_lows = get_swings(df, SWING_WINDOW)
 
-    if not all(col in df.columns for col in required_cols):
-        continue
+        if len(swing_highs) < 2 or len(swing_lows) < 2:
+            continue
 
-    if len(df) < 100:
-        continue
+        if not is_uptrend(swing_highs, swing_lows):
+            continue
 
-    swing_highs, swing_lows = get_swings(
-        df,
-        SWING_WINDOW
-    )
+        close_price = float(df["Close"].iloc[-1])
+        breakout_price = float(swing_highs[-1])
+        stop_loss = float(swing_lows[-1])
 
-    if len(swing_highs) < 2 or len(swing_lows) < 2:
-        continue
+        distance = ((close_price - breakout_price) / breakout_price) * 100
 
-    if not is_uptrend(
-        swing_highs,
-        swing_lows
-    ):
-        continue
-
-    close_price = float(df["Close"].iloc[-1])
-
-    breakout_price = float(swing_highs[-1])
-    stop_loss = float(swing_lows[-1])
-
-    distance_pct = (
-        (close_price - breakout_price)
-        / breakout_price
-    ) * 100
-
-    watchlist.append({
-        "ticker": ticker,
-        "distance": distance_pct
-    })
-
-    # BUY SIGNAL
-    if close_price > breakout_price:
-
-        risk_pct = (
-            (breakout_price - stop_loss)
-            / breakout_price
-        ) * 100
-
-        signals.append({
+        watchlist.append({
             "ticker": ticker,
-            "buy": breakout_price,
-            "close": close_price,
-            "sl": stop_loss,
-            "risk": risk_pct
+            "distance": distance
         })
 
-except Exception as e:
+        if close_price > breakout_price:
 
-    print(f"Error processing {ticker}: {e}")
-```
+            risk = ((breakout_price - stop_loss) / breakout_price) * 100
 
-# =========================================================
+            signals.append({
+                "ticker": ticker,
+                "buy": breakout_price,
+                "close": close_price,
+                "sl": stop_loss,
+                "risk": risk
+            })
 
-# RESULTS
+    except Exception as e:
+        print(f"Error {ticker}: {e}")
 
-# =========================================================
 
-print("\n" + "=" * 60)
-print("DOW THEORY BUY SIGNALS")
-print("=" * 60)
+# =========================
+# OUTPUT
+# =========================
+print("\nDOW THEORY BUY SIGNALS\n")
 
 email_body = "DOW THEORY BUY SIGNALS\n\n"
 
 if not signals:
-
-```
-print("No valid signals found today.\n")
-
-email_body += "No valid signals found today.\n\n"
-```
-
+    print("No valid signals found today.")
+    email_body += "No valid signals found today.\n"
 else:
+    for s in signals:
+        print(s["ticker"], s["buy"], s["close"])
 
-```
-for s in signals:
+        email_body += f"""
+{s['ticker']}
+BUY ABOVE: {s['buy']:.2f}
+CLOSE: {s['close']:.2f}
+SL: {s['sl']:.2f}
+RISK: {s['risk']:.2f}%
+------------------------
+"""
 
-    print(f"Ticker     : {s['ticker']}")
-    print(f"Buy Above  : {s['buy']:.2f}")
-    print(f"Close      : {s['close']:.2f}")
-    print(f"Stop Loss  : {s['sl']:.2f}")
-    print(f"Risk       : {s['risk']:.2f}%")
-    print("-" * 50)
-
-    email_body += (
-        f"{s['ticker']}\n"
-        f"BUY ABOVE : {s['buy']:.2f}\n"
-        f"CLOSE     : {s['close']:.2f}\n"
-        f"STOP LOSS : {s['sl']:.2f}\n"
-        f"RISK      : {s['risk']:.2f}%\n"
-        f"{'-'*40}\n\n"
-    )
-```
-
-# =========================================================
-
+# =========================
 # WATCHLIST
-
-# =========================================================
-
-watchlist = sorted(
-watchlist,
-key=lambda x: abs(x["distance"])
-)
-
-top_watchlist = watchlist[:20]
-
-print("\nTOP WATCHLIST")
-print("-" * 50)
+# =========================
+watchlist = sorted(watchlist, key=lambda x: abs(x["distance"]))[:20]
 
 email_body += "\nTOP WATCHLIST\n\n"
 
-for stock in top_watchlist:
+for w in watchlist:
+    email_body += f"{w['ticker']} {w['distance']:.2f}%\n"
 
-```
-print(
-    f"{stock['ticker']}  "
-    f"{stock['distance']:.2f}%"
-)
-
-email_body += (
-    f"{stock['ticker']} "
-    f"{stock['distance']:.2f}%\n"
-)
-```
-
-# =========================================================
-
+# =========================
 # EMAIL
-
-# =========================================================
-
-print("\nSending email...")
-
+# =========================
 success = send_email(
-"Dow Theory Scanner Results",
-email_body
+    "Dow Theory Scanner Results",
+    email_body
 )
 
-if success:
-print("Email sent successfully.")
-else:
-print("Email not sent.")
-
-print("\nScan completed.")
+print("Email sent:", success)

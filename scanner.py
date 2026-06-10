@@ -1,1 +1,1 @@
-
+print("DOW THEORY SCANNER RUNNING")

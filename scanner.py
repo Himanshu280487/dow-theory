@@ -131,6 +131,19 @@ if not signals:
 
     print("No valid signals found today.")
 
+email_body += f"""
+{s['ticker']}
+
+BUY ABOVE : {s['buy']:.2f}
+CLOSE     : {s['close']:.2f}
+STOP LOSS : {s['sl']:.2f}
+RISK      : {s['risk']:.2f}%
+
+--------------------------------
+"""
+
+email_body = "DOW THEORY BUY SIGNALS\n\n"
+
 else:
 
     for s in signals:

@@ -133,18 +133,20 @@ if not signals:
 
 email_body = "DOW THEORY BUY SIGNALS\n\n"
 
-else:
-
     for s in signals:
 
-        print("-" * 50)
+        email_body += f"""
+        {s['ticker']}
 
-        print(f"\n{s['ticker']}")
-        print(f"BUY ABOVE : {s['buy']:.2f}")
-        print(f"CLOSE     : {s['close']:.2f}")
-        print(f"STOP LOSS : {s['sl']:.2f}")
-        print(f"RISK      : {s['risk']:.2f}%")
-        print()
+        BUY ABOVE : {s['buy']:.2f}
+        CLOSE     : {s['close']:.2f}
+        STOP LOSS : {s['sl']:.2f}
+        RISK      : {s['risk']:.2f}%
+
+--------------------------------
+"""
+
+email_body = "No valid Dow Theory signals found today."
 
     print("-" * 50)
     print(f"\nTOTAL SIGNALS : {len(signals)}")

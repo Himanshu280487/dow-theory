@@ -5,7 +5,7 @@ from email_alert import send_email
 # =========================
 # SETTINGS
 # =========================
-SWING_WINDOW = 10
+SWING_WINDOW = 5
 NUM_STOCKS = 10
 
 # =========================

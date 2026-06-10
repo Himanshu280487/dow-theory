@@ -9,7 +9,7 @@ SWING_WINDOW = 5
 NUM_STOCKS = 10
 
 # =========================================================
-# FIND SWING HIGHS / LOWS
+# SWING DETECTION
 # =========================================================
 
 def get_swings(df, window=5):
@@ -25,84 +25,39 @@ def get_swings(df, window=5):
         current_high = highs.iloc[i]
         current_low = lows.iloc[i]
 
-        left_highs = highs.iloc[i-window:i]
-        right_highs = highs.iloc[i+1:i+window+1]
-
-        left_lows = lows.iloc[i-window:i]
-        right_lows = lows.iloc[i+1:i+window+1]
-
-        # Swing High
         if (
-            current_high > left_highs.max()
-            and current_high > right_highs.max()
+            current_high > highs.iloc[i-window:i].max()
+            and
+            current_high > highs.iloc[i+1:i+window+1].max()
         ):
             swing_highs.append(float(current_high))
 
-        # Swing Low
         if (
-            current_low < left_lows.min()
-            and current_low < right_lows.min()
+            current_low < lows.iloc[i-window:i].min()
+            and
+            current_low < lows.iloc[i+1:i+window+1].min()
         ):
             swing_lows.append(float(current_low))
 
     return swing_highs, swing_lows
 
-
 # =========================================================
-# DOW THEORY TREND
+# TREND
 # =========================================================
 
-def get_trend(highs, lows):
+def is_uptrend(highs, lows):
 
     if len(highs) < 2 or len(lows) < 2:
-        return "INSUFFICIENT_DATA"
+        return False
 
-    prev_high = highs[-2]
-    last_high = highs[-1]
-
-    prev_low = lows[-2]
-    last_low = lows[-1]
-
-    # Higher High + Higher Low
-    if last_high > prev_high and last_low > prev_low:
-        return "UPTREND"
-
-    # Lower High + Lower Low
-    if last_high < prev_high and last_low < prev_low:
-        return "DOWNTREND"
-
-    return "SIDEWAYS"
-
+    return (
+        highs[-1] > highs[-2]
+        and
+        lows[-1] > lows[-2]
+    )
 
 # =========================================================
-# SIGNAL GENERATION
-# =========================================================
-
-def get_signal(trend, close_price, swing_highs):
-
-    if trend != "UPTREND":
-        return "-", None, None
-
-    if len(swing_highs) == 0:
-        return "-", None, None
-
-    breakout_level = swing_highs[-1]
-
-    distance_pct = (
-        (close_price - breakout_level)
-        / breakout_level
-    ) * 100
-
-    if close_price > breakout_level:
-        signal = "BUY_SIGNAL"
-    else:
-        signal = "WATCHLIST"
-
-    return signal, breakout_level, distance_pct
-
-
-# =========================================================
-# LOAD NSE STOCKS
+# MAIN
 # =========================================================
 
 url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -111,11 +66,7 @@ stocks = pd.read_csv(url)
 
 symbols = stocks["SYMBOL"].head(NUM_STOCKS)
 
-print(f"\nTesting {len(symbols)} stocks...\n")
-
-# =========================================================
-# SCAN
-# =========================================================
+signals = []
 
 for symbol in symbols:
 
@@ -131,59 +82,67 @@ for symbol in symbols:
         )
 
         if len(df) < 100:
-            print(f"\n{ticker}")
-            print("Trend    : INSUFFICIENT_DATA")
             continue
 
         swing_highs, swing_lows = get_swings(
             df,
-            window=SWING_WINDOW
+            SWING_WINDOW
         )
 
-        trend = get_trend(
+        if not is_uptrend(
             swing_highs,
             swing_lows
-        )
+        ):
+            continue
 
         close_price = float(
             df["Close"].squeeze().iloc[-1]
         )
 
-        signal, breakout_level, distance_pct = get_signal(
-            trend,
-            close_price,
-            swing_highs
-        )
+        breakout_price = swing_highs[-1]
+        stop_loss = swing_lows[-1]
 
-        print(f"\n{ticker}")
+        # BUY SIGNAL
+        if close_price > breakout_price:
 
-        print(f"Trend    : {trend}")
-        print(f"Close    : {close_price:.2f}")
+            risk_pct = (
+                (breakout_price - stop_loss)
+                / breakout_price
+            ) * 100
 
-        if breakout_level is not None:
-            print(f"Breakout : {breakout_level:.2f}")
-            print(f"Distance : {distance_pct:.2f}%")
+            signals.append({
+                "ticker": ticker,
+                "buy": breakout_price,
+                "close": close_price,
+                "sl": stop_loss,
+                "risk": risk_pct
+            })
 
-        print(f"Signal   : {signal}")
+    except Exception:
+        pass
 
-        if len(swing_highs) >= 3:
-            h1, h2, h3 = swing_highs[-3:]
-            print(
-                f"Highs    : "
-                f"{h1:.2f} -> {h2:.2f} -> {h3:.2f}"
-            )
+# =========================================================
+# RESULTS
+# =========================================================
 
-        if len(swing_lows) >= 3:
-            l1, l2, l3 = swing_lows[-3:]
-            print(
-                f"Lows     : "
-                f"{l1:.2f} -> {l2:.2f} -> {l3:.2f}"
-            )
+print("\nDOW THEORY BUY SIGNALS\n")
 
-    except Exception as e:
+if not signals:
 
-        print(f"\n{ticker}")
-        print("Trend    : ERROR")
-        print(str(e))
+    print("No valid signals found today.")
 
-print("\nSCAN COMPLETE")
+else:
+
+    for s in signals:
+
+        print("-" * 50)
+
+        print(f"\n{s['ticker']}")
+        print(f"BUY ABOVE : {s['buy']:.2f}")
+        print(f"CLOSE     : {s['close']:.2f}")
+        print(f"STOP LOSS : {s['sl']:.2f}")
+        print(f"RISK      : {s['risk']:.2f}%")
+        print()
+
+    print("-" * 50)
+    print(f"\nTOTAL SIGNALS : {len(signals)}")

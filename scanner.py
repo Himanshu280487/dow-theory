@@ -5,12 +5,12 @@ from email_alert import send_email
 # =========================
 # SETTINGS
 # =========================
-SWING_WINDOW = 10
+SWING_WINDOW = 5
 
 # =========================
 # SWING DETECTION
 # =========================
-def get_swings(df, window=10):
+def get_swings(df, window=5):
 
     highs = df["High"].astype(float)
     lows = df["Low"].astype(float)
@@ -20,26 +20,26 @@ def get_swings(df, window=10):
 
     for i in range(window, len(df) - window):
 
-        current_high = float(highs.iloc[i])
-        current_low = float(lows.iloc[i])
+        ch = float(highs.iloc[i])
+        cl = float(lows.iloc[i])
 
-        left_high = float(highs.iloc[i-window:i].max())
-        right_high = float(highs.iloc[i+1:i+window+1].max())
+        lh = float(highs.iloc[i - window:i].max())
+        rh = float(highs.iloc[i + 1:i + window + 1].max())
 
-        left_low = float(lows.iloc[i-window:i].min())
-        right_low = float(lows.iloc[i+1:i+window+1].min())
+        ll = float(lows.iloc[i - window:i].min())
+        rl = float(lows.iloc[i + 1:i + window + 1].min())
 
-        if current_high > left_high and current_high > right_high:
-            swing_highs.append(current_high)
+        if ch > lh and ch > rh:
+            swing_highs.append(ch)
 
-        if current_low < left_low and current_low < right_low:
-            swing_lows.append(current_low)
+        if cl < ll and cl < rl:
+            swing_lows.append(cl)
 
     return swing_highs, swing_lows
 
 
 # =========================
-# TREND CHECK
+# TREND CHECK (HH-HL)
 # =========================
 def is_uptrend(highs, lows):
 
@@ -50,23 +50,31 @@ def is_uptrend(highs, lows):
 
 
 # =========================
-# LOAD ALL NSE STOCKS
+# VOLUME CONFIRMATION
+# =========================
+def volume_confirmation(df):
+
+    vol = df["Volume"].astype(float)
+
+    avg_vol = vol.tail(20).mean()
+    last_vol = vol.iloc[-1]
+
+    return last_vol > avg_vol
+
+
+# =========================
+# LOAD NSE STOCKS
 # =========================
 url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
 stocks = pd.read_csv(url)
 
-# CLEAN SYMBOLS (very important)
-symbols = (
-    stocks["SYMBOL"]
-    .dropna()
-    .astype(str)
-    .unique()
-)
+symbols = stocks["SYMBOL"].dropna().astype(str).unique()
 
 signals = []
 watchlist = []
 
-print(f"Total stocks to scan: {len(symbols)}")
+print(f"Total stocks: {len(symbols)}")
+
 
 # =========================
 # SCAN ALL STOCKS
@@ -77,34 +85,70 @@ for symbol in symbols:
 
     try:
 
-        df = yf.download(
-            ticker,
-            period="1y",
-            auto_adjust=True,
-            progress=False
-        )
+        # -------------------------
+        # MONTHLY TREND (PRIMARY)
+        # -------------------------
+        df_m = yf.download(ticker, period="5y", interval="1mo", progress=False)
 
-        if df.empty:
+        if df_m.empty or len(df_m) < 6:
             continue
 
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
+        monthly_close = df_m["Close"].astype(float)
+        monthly_uptrend = monthly_close.iloc[-1] > monthly_close.iloc[-6]
 
-        if len(df) < 100:
+        if not monthly_uptrend:
             continue
 
-        swing_highs, swing_lows = get_swings(df, SWING_WINDOW)
 
-        if len(swing_highs) < 2 or len(swing_lows) < 2:
+        # -------------------------
+        # WEEKLY TREND (SECONDARY)
+        # -------------------------
+        df_w = yf.download(ticker, period="2y", interval="1wk", progress=False)
+
+        if df_w.empty or len(df_w) < 30:
             continue
 
-        if not is_uptrend(swing_highs, swing_lows):
+        swing_highs_w, swing_lows_w = get_swings(df_w, SWING_WINDOW)
+
+        if len(swing_highs_w) < 2 or len(swing_lows_w) < 2:
             continue
 
-        close_price = float(df["Close"].iloc[-1])
-        breakout_price = float(swing_highs[-1])
-        stop_loss = float(swing_lows[-1])
+        if not is_uptrend(swing_highs_w, swing_lows_w):
+            continue
 
+
+        # -------------------------
+        # DAILY (ENTRY)
+        # -------------------------
+        df_d = yf.download(ticker, period="1y", interval="1d", progress=False)
+
+        if df_d.empty or len(df_d) < 100:
+            continue
+
+        swing_highs_d, swing_lows_d = get_swings(df_d, SWING_WINDOW)
+
+        if len(swing_highs_d) < 2 or len(swing_lows_d) < 2:
+            continue
+
+        if not is_uptrend(swing_highs_d, swing_lows_d):
+            continue
+
+
+        close_price = float(df_d["Close"].iloc[-1])
+        breakout_price = float(swing_highs_d[-1])
+        stop_loss = float(swing_lows_d[-1])
+
+
+        # -------------------------
+        # VOLUME FILTER
+        # -------------------------
+        if not volume_confirmation(df_d):
+            continue
+
+
+        # -------------------------
+        # WATCHLIST DISTANCE
+        # -------------------------
         distance = ((close_price - breakout_price) / breakout_price) * 100
 
         watchlist.append({
@@ -112,6 +156,10 @@ for symbol in symbols:
             "distance": distance
         })
 
+
+        # -------------------------
+        # BUY SIGNAL
+        # -------------------------
         if close_price > breakout_price:
 
             risk = ((breakout_price - stop_loss) / breakout_price) * 100
@@ -124,35 +172,32 @@ for symbol in symbols:
                 "risk": risk
             })
 
+
     except Exception:
         continue
 
 
 # =========================
-# RESULTS
+# OUTPUT
 # =========================
-email_body = "DOW THEORY BUY SIGNALS\n\n"
-
-print("\n==================== RESULTS ====================")
+email_body = "MULTI-TIMEFRAME DOW THEORY SCANNER\n\n"
 
 if not signals:
-    email_body += "No valid signals found today.\n"
-    print("No signals found")
+    email_body += "No buy signals today.\n\n"
 else:
     for s in signals:
-        print(s["ticker"], s["buy"], s["close"])
-
         email_body += (
             f"{s['ticker']}\n"
-            f"BUY ABOVE: {s['buy']:.2f}\n"
+            f"BUY: {s['buy']:.2f}\n"
             f"CLOSE: {s['close']:.2f}\n"
             f"SL: {s['sl']:.2f}\n"
             f"RISK: {s['risk']:.2f}%\n"
-            f"------------------------\n\n"
+            f"----------------------\n\n"
         )
 
+
 # =========================
-# WATCHLIST (IMPORTANT)
+# TOP WATCHLIST
 # =========================
 watchlist = sorted(watchlist, key=lambda x: abs(x["distance"]))[:20]
 
@@ -161,7 +206,8 @@ email_body += "\nTOP WATCHLIST\n\n"
 for w in watchlist:
     email_body += f"{w['ticker']} {w['distance']:.2f}%\n"
 
+
 # =========================
-# EMAIL
+# SEND EMAIL
 # =========================
-send_email("Dow Theory Scanner Results", email_body)
+send_email("Multi-Timeframe Dow Theory Scanner", email_body)

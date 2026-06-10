@@ -1,39 +1,51 @@
 import pandas as pd
 import yfinance as yf
 
+# =========================================================
+# SETTINGS
+# =========================================================
+
+SWING_WINDOW = 5
+NUM_STOCKS = 10
 
 # =========================================================
 # FIND SWING HIGHS / LOWS
 # =========================================================
 
-def get_swings(df):
-    highs = []
-    lows = []
+def get_swings(df, window=5):
 
-    high_series = df["High"].squeeze()
-    low_series = df["Low"].squeeze()
+    highs = df["High"].squeeze()
+    lows = df["Low"].squeeze()
 
-    for i in range(2, len(df) - 2):
+    swing_highs = []
+    swing_lows = []
+
+    for i in range(window, len(df) - window):
+
+        current_high = highs.iloc[i]
+        current_low = lows.iloc[i]
+
+        left_highs = highs.iloc[i-window:i]
+        right_highs = highs.iloc[i+1:i+window+1]
+
+        left_lows = lows.iloc[i-window:i]
+        right_lows = lows.iloc[i+1:i+window+1]
 
         # Swing High
         if (
-            high_series.iloc[i] > high_series.iloc[i - 1]
-            and high_series.iloc[i] > high_series.iloc[i - 2]
-            and high_series.iloc[i] > high_series.iloc[i + 1]
-            and high_series.iloc[i] > high_series.iloc[i + 2]
+            current_high > left_highs.max()
+            and current_high > right_highs.max()
         ):
-            highs.append(float(high_series.iloc[i]))
+            swing_highs.append(float(current_high))
 
         # Swing Low
         if (
-            low_series.iloc[i] < low_series.iloc[i - 1]
-            and low_series.iloc[i] < low_series.iloc[i - 2]
-            and low_series.iloc[i] < low_series.iloc[i + 1]
-            and low_series.iloc[i] < low_series.iloc[i + 2]
+            current_low < left_lows.min()
+            and current_low < right_lows.min()
         ):
-            lows.append(float(low_series.iloc[i]))
+            swing_lows.append(float(current_low))
 
-    return highs, lows
+    return swing_highs, swing_lows
 
 
 # =========================================================
@@ -42,19 +54,26 @@ def get_swings(df):
 
 def get_trend(highs, lows):
 
-    if len(highs) < 2 or len(lows) < 2:
+    if len(highs) < 3 or len(lows) < 3:
         return "INSUFFICIENT_DATA"
 
-    h1 = highs[-2]
-    h2 = highs[-1]
+    h1, h2, h3 = highs[-3:]
+    l1, l2, l3 = lows[-3:]
 
-    l1 = lows[-2]
-    l2 = lows[-1]
-
-    if h2 > h1 and l2 > l1:
+    # Higher Highs + Higher Lows
+    if (
+        h1 < h2 < h3
+        and
+        l1 < l2 < l3
+    ):
         return "UPTREND"
 
-    if h2 < h1 and l2 < l1:
+    # Lower Highs + Lower Lows
+    if (
+        h1 > h2 > h3
+        and
+        l1 > l2 > l3
+    ):
         return "DOWNTREND"
 
     return "SIDEWAYS"
@@ -68,7 +87,7 @@ url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
 
 stocks = pd.read_csv(url)
 
-symbols = stocks["SYMBOL"].head(10)
+symbols = stocks["SYMBOL"].head(NUM_STOCKS)
 
 print(f"\nTesting {len(symbols)} stocks...\n")
 
@@ -93,20 +112,28 @@ for symbol in symbols:
             print(f"{ticker:20} INSUFFICIENT_DATA")
             continue
 
-        highs, lows = get_swings(df)
+        swing_highs, swing_lows = get_swings(
+            df,
+            window=SWING_WINDOW
+        )
 
-        trend = get_trend(highs, lows)
+        trend = get_trend(
+            swing_highs,
+            swing_lows
+        )
 
         print(f"{ticker:20} {trend}")
 
-        if len(highs) >= 2 and len(lows) >= 2:
-
+        if len(swing_highs) >= 3:
+            h1, h2, h3 = swing_highs[-3:]
             print(
-                f"   HH: {highs[-2]:.2f} -> {highs[-1]:.2f}"
+                f"   Highs: {h1:.2f} -> {h2:.2f} -> {h3:.2f}"
             )
 
+        if len(swing_lows) >= 3:
+            l1, l2, l3 = swing_lows[-3:]
             print(
-                f"   HL: {lows[-2]:.2f} -> {lows[-1]:.2f}"
+                f"   Lows : {l1:.2f} -> {l2:.2f} -> {l3:.2f}"
             )
 
     except Exception as e:

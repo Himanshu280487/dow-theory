@@ -133,8 +133,6 @@ if not signals:
 
 email_body = "DOW THEORY BUY SIGNALS\n\n"
 
-    for s in signals:
-
         email_body += f"""
         {s['ticker']}
 

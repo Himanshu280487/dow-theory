@@ -13,9 +13,8 @@ NUM_STOCKS = 10
 # =========================================================
 
 def get_swings(df, window=5):
-
-    highs = df["High"].squeeze()
-    lows = df["Low"].squeeze()
+    highs = df["High"]
+    lows = df["Low"]
 
     swing_highs = []
     swing_lows = []
@@ -25,36 +24,36 @@ def get_swings(df, window=5):
         current_high = highs.iloc[i]
         current_low = lows.iloc[i]
 
+        # Swing High
         if (
-            current_high > highs.iloc[i-window:i].max()
-            and
-            current_high > highs.iloc[i+1:i+window+1].max()
+            current_high > highs.iloc[i - window:i].max()
+            and current_high > highs.iloc[i + 1:i + window + 1].max()
         ):
             swing_highs.append(float(current_high))
 
+        # Swing Low
         if (
-            current_low < lows.iloc[i-window:i].min()
-            and
-            current_low < lows.iloc[i+1:i+window+1].min()
+            current_low < lows.iloc[i - window:i].min()
+            and current_low < lows.iloc[i + 1:i + window + 1].min()
         ):
             swing_lows.append(float(current_low))
 
     return swing_highs, swing_lows
 
+
 # =========================================================
-# TREND
+# TREND CHECK
 # =========================================================
 
 def is_uptrend(highs, lows):
-
     if len(highs) < 2 or len(lows) < 2:
         return False
 
     return (
         highs[-1] > highs[-2]
-        and
-        lows[-1] > lows[-2]
+        and lows[-1] > lows[-2]
     )
+
 
 # =========================================================
 # MAIN
@@ -81,7 +80,7 @@ for symbol in symbols:
             progress=False
         )
 
-        if len(df) < 100:
+        if df.empty or len(df) < 100:
             continue
 
         swing_highs, swing_lows = get_swings(
@@ -89,20 +88,21 @@ for symbol in symbols:
             SWING_WINDOW
         )
 
+        if len(swing_highs) < 2 or len(swing_lows) < 2:
+            continue
+
         if not is_uptrend(
             swing_highs,
             swing_lows
         ):
             continue
 
-        close_price = float(
-            df["Close"].squeeze().iloc[-1]
-        )
+        close_price = float(df["Close"].iloc[-1])
 
         breakout_price = swing_highs[-1]
         stop_loss = swing_lows[-1]
 
-        # BUY SIGNAL
+        # Buy Signal
         if close_price > breakout_price:
 
             risk_pct = (
@@ -118,8 +118,9 @@ for symbol in symbols:
                 "risk": risk_pct
             })
 
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error processing {ticker}: {e}")
+
 
 # =========================================================
 # RESULTS
@@ -131,26 +132,49 @@ if not signals:
 
     print("No valid signals found today.")
 
-email_body = "DOW THEORY BUY SIGNALS\n\n"
+    email_body = "No valid Dow Theory signals found today."
+
+else:
+
+    email_body = "DOW THEORY BUY SIGNALS\n\n"
+
+    for s in signals:
+
+        print(f"Ticker     : {s['ticker']}")
+        print(f"Buy Above  : {s['buy']:.2f}")
+        print(f"Close      : {s['close']:.2f}")
+        print(f"Stop Loss  : {s['sl']:.2f}")
+        print(f"Risk       : {s['risk']:.2f}%")
+        print("-" * 50)
 
         email_body += f"""
-        {s['ticker']}
+{s['ticker']}
 
-        BUY ABOVE : {s['buy']:.2f}
-        CLOSE     : {s['close']:.2f}
-        STOP LOSS : {s['sl']:.2f}
-        RISK      : {s['risk']:.2f}%
+BUY ABOVE : {s['buy']:.2f}
+CLOSE     : {s['close']:.2f}
+STOP LOSS : {s['sl']:.2f}
+RISK      : {s['risk']:.2f}%
 
 --------------------------------
+
 """
 
-email_body = "No valid Dow Theory signals found today."
-
-    print("-" * 50)
     print(f"\nTOTAL SIGNALS : {len(signals)}")
+
+
+# =========================================================
+# EMAIL
+# =========================================================
+
+try:
     from email_alert import send_email
 
     send_email(
         "Dow Theory Scanner Results",
         email_body
     )
+
+    print("\nEmail sent successfully.")
+
+except Exception as e:
+    print(f"\nEmail error: {e}")

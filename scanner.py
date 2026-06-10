@@ -1,37 +1,48 @@
+import pandas as pd
 import yfinance as yf
 
-symbol = "RELIANCE.NS"
+# Load NSE stock list
+url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+stocks = pd.read_csv(url)
 
-df = yf.download(
-    symbol,
-    period="1y",
-    auto_adjust=True,
-    progress=False
-)
+symbols = stocks["SYMBOL"].head(10)
 
-# Handle yfinance multi-index columns
-highs = df["High"].squeeze()
-lows = df["Low"].squeeze()
+print(f"Testing {len(symbols)} stocks...\n")
 
-recent_high = float(highs.tail(20).max())
-previous_high = float(highs.iloc[-40:-20].max())
+for symbol in symbols:
 
-recent_low = float(lows.tail(20).min())
-previous_low = float(lows.iloc[-40:-20].min())
+    ticker = f"{symbol}.NS"
 
-print(f"Recent High: {recent_high:.2f}")
-print(f"Previous High: {previous_high:.2f}")
+    try:
+        df = yf.download(
+            ticker,
+            period="1y",
+            auto_adjust=True,
+            progress=False
+        )
 
-print(f"Recent Low: {recent_low:.2f}")
-print(f"Previous Low: {previous_low:.2f}")
+        if len(df) < 60:
+            continue
 
-if recent_high > previous_high and recent_low > previous_low:
-    trend = "UPTREND"
+        highs = df["High"].squeeze()
+        lows = df["Low"].squeeze()
 
-elif recent_high < previous_high and recent_low < previous_low:
-    trend = "DOWNTREND"
+        recent_high = float(highs.tail(20).max())
+        previous_high = float(highs.iloc[-40:-20].max())
 
-else:
-    trend = "SIDEWAYS"
+        recent_low = float(lows.tail(20).min())
+        previous_low = float(lows.iloc[-40:-20].min())
 
-print(f"\nTREND: {trend}")
+        if recent_high > previous_high and recent_low > previous_low:
+            trend = "UPTREND"
+
+        elif recent_high < previous_high and recent_low < previous_low:
+            trend = "DOWNTREND"
+
+        else:
+            trend = "SIDEWAYS"
+
+        print(f"{ticker:20} {trend}")
+
+    except Exception as e:
+        print(f"{ticker:20} ERROR")

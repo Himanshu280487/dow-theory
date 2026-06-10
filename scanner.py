@@ -9,26 +9,29 @@ df = yf.download(
     progress=False
 )
 
-highs = df["High"].tail(60)
-lows = df["Low"].tail(60)
+# Handle yfinance multi-index columns
+highs = df["High"].squeeze()
+lows = df["Low"].squeeze()
 
-recent_high = highs[-20:].max()
-previous_high = highs[-40:-20].max()
+recent_high = float(highs.tail(20).max())
+previous_high = float(highs.iloc[-40:-20].max())
 
-recent_low = lows[-20:].min()
-previous_low = lows[-40:-20].min()
+recent_low = float(lows.tail(20).min())
+previous_low = float(lows.iloc[-40:-20].min())
 
-print(f"Recent High: {recent_high}")
-print(f"Previous High: {previous_high}")
+print(f"Recent High: {recent_high:.2f}")
+print(f"Previous High: {previous_high:.2f}")
 
-print(f"Recent Low: {recent_low}")
-print(f"Previous Low: {previous_low}")
+print(f"Recent Low: {recent_low:.2f}")
+print(f"Previous Low: {previous_low:.2f}")
 
 if recent_high > previous_high and recent_low > previous_low:
-    print("UPTREND")
+    trend = "UPTREND"
 
 elif recent_high < previous_high and recent_low < previous_low:
-    print("DOWNTREND")
+    trend = "DOWNTREND"
 
 else:
-    print("SIDEWAYS")
+    trend = "SIDEWAYS"
+
+print(f"\nTREND: {trend}")

@@ -75,23 +75,30 @@ def get_trend(highs, lows):
 
 
 # =========================================================
-# BUY SIGNAL
+# SIGNAL GENERATION
 # =========================================================
 
 def get_signal(trend, close_price, swing_highs):
 
     if trend != "UPTREND":
-        return "-"
+        return "-", None, None
 
-    if len(swing_highs) < 1:
-        return "-"
+    if len(swing_highs) == 0:
+        return "-", None, None
 
-    last_swing_high = swing_highs[-1]
+    breakout_level = swing_highs[-1]
 
-    if close_price > last_swing_high:
-        return "BUY_SIGNAL"
+    distance_pct = (
+        (close_price - breakout_level)
+        / breakout_level
+    ) * 100
 
-    return "WATCHLIST"
+    if close_price > breakout_level:
+        signal = "BUY_SIGNAL"
+    else:
+        signal = "WATCHLIST"
+
+    return signal, breakout_level, distance_pct
 
 
 # =========================================================
@@ -124,7 +131,8 @@ for symbol in symbols:
         )
 
         if len(df) < 100:
-            print(f"{ticker:20} INSUFFICIENT_DATA")
+            print(f"\n{ticker}")
+            print("Trend    : INSUFFICIENT_DATA")
             continue
 
         swing_highs, swing_lows = get_swings(
@@ -137,33 +145,45 @@ for symbol in symbols:
             swing_lows
         )
 
-        close_price = float(df["Close"].squeeze().iloc[-1])
+        close_price = float(
+            df["Close"].squeeze().iloc[-1]
+        )
 
-        signal = get_signal(
+        signal, breakout_level, distance_pct = get_signal(
             trend,
             close_price,
             swing_highs
         )
 
-        print(f"{ticker:20} {trend:12} {signal}")
+        print(f"\n{ticker}")
+
+        print(f"Trend    : {trend}")
+        print(f"Close    : {close_price:.2f}")
+
+        if breakout_level is not None:
+            print(f"Breakout : {breakout_level:.2f}")
+            print(f"Distance : {distance_pct:.2f}%")
+
+        print(f"Signal   : {signal}")
 
         if len(swing_highs) >= 3:
             h1, h2, h3 = swing_highs[-3:]
             print(
-                f"   Highs: {h1:.2f} -> {h2:.2f} -> {h3:.2f}"
+                f"Highs    : "
+                f"{h1:.2f} -> {h2:.2f} -> {h3:.2f}"
             )
 
         if len(swing_lows) >= 3:
             l1, l2, l3 = swing_lows[-3:]
             print(
-                f"   Lows : {l1:.2f} -> {l2:.2f} -> {l3:.2f}"
+                f"Lows     : "
+                f"{l1:.2f} -> {l2:.2f} -> {l3:.2f}"
             )
-
-        print(f"   Close : {close_price:.2f}")
 
     except Exception as e:
 
-        print(f"{ticker:20} ERROR")
+        print(f"\n{ticker}")
+        print("Trend    : ERROR")
         print(str(e))
 
 print("\nSCAN COMPLETE")

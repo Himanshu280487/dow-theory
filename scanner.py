@@ -54,29 +54,44 @@ def get_swings(df, window=5):
 
 def get_trend(highs, lows):
 
-    if len(highs) < 3 or len(lows) < 3:
+    if len(highs) < 2 or len(lows) < 2:
         return "INSUFFICIENT_DATA"
 
-    h1, h2, h3 = highs[-3:]
-    l1, l2, l3 = lows[-3:]
+    prev_high = highs[-2]
+    last_high = highs[-1]
 
-    # Higher Highs + Higher Lows
-    if (
-        h1 < h2 < h3
-        and
-        l1 < l2 < l3
-    ):
+    prev_low = lows[-2]
+    last_low = lows[-1]
+
+    # Higher High + Higher Low
+    if last_high > prev_high and last_low > prev_low:
         return "UPTREND"
 
-    # Lower Highs + Lower Lows
-    if (
-        h1 > h2 > h3
-        and
-        l1 > l2 > l3
-    ):
+    # Lower High + Lower Low
+    if last_high < prev_high and last_low < prev_low:
         return "DOWNTREND"
 
     return "SIDEWAYS"
+
+
+# =========================================================
+# BUY SIGNAL
+# =========================================================
+
+def get_signal(trend, close_price, swing_highs):
+
+    if trend != "UPTREND":
+        return "-"
+
+    if len(swing_highs) < 1:
+        return "-"
+
+    last_swing_high = swing_highs[-1]
+
+    if close_price > last_swing_high:
+        return "BUY_SIGNAL"
+
+    return "WATCHLIST"
 
 
 # =========================================================
@@ -105,7 +120,7 @@ for symbol in symbols:
             ticker,
             period="1y",
             auto_adjust=True,
-            progress=False,
+            progress=False
         )
 
         if len(df) < 100:
@@ -122,7 +137,15 @@ for symbol in symbols:
             swing_lows
         )
 
-        print(f"{ticker:20} {trend}")
+        close_price = float(df["Close"].squeeze().iloc[-1])
+
+        signal = get_signal(
+            trend,
+            close_price,
+            swing_highs
+        )
+
+        print(f"{ticker:20} {trend:12} {signal}")
 
         if len(swing_highs) >= 3:
             h1, h2, h3 = swing_highs[-3:]
@@ -135,6 +158,8 @@ for symbol in symbols:
             print(
                 f"   Lows : {l1:.2f} -> {l2:.2f} -> {l3:.2f}"
             )
+
+        print(f"   Close : {close_price:.2f}")
 
     except Exception as e:
 
